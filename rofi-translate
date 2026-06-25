@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+# Jalankan Rofi dan tangkap input serta exit code.
+# PENTING: Pipe echo -n "" agar Rofi tidak menggantung menunggu stdin.
+text=$(echo -n "" | rofi -dmenu -p "Translate to EN:" \
+            -kb-accept-alt "" \
+            -kb-custom-1 "Shift+Return" \
+            -theme-str 'window {width: 40%;}')
+
+exit_code=$?
+
+# Jika input tidak kosong
+if [ -n "$text" ]; then
+  # Mencari executable 'trans' (translate-shell) secara dinamis agar portabel
+  if command -v trans &> /dev/null; then
+    TRANS_BIN="trans"
+  elif [ -f "$HOME/.local/bin/trans" ]; then
+    TRANS_BIN="$HOME/.local/bin/trans"
+  else
+    notify-send -u normal "Translation Error" "translate-shell (trans) tidak ditemukan." &
+    exit 1
+  fi
+
+  # URL encode teks menggunakan jq agar aman untuk request HTTP
+  encoded=$(echo -n "$text" | jq -sRr @uri)
+  
+  # Panggil API Google Translate secara langsung (~150-250ms)
+  response=$(curl -s -A "Mozilla/5.0" "https://translate.googleapis.com/translate_a/single?client=gtx&sl=id&tl=en&dt=t&q=${encoded}")
+  
+  # Ekstrak hasil terjemahan menggunakan jq
+  translated=$(echo "$response" | jq -r '.[0][0][0]')
+  
+  if [ -n "$translated" ] && [ "$translated" != "null" ]; then
+    # Selalu masukkan hasil terjemahan ke clipboard utama
+    echo -n "$translated" | xclip -selection clipboard
+    
+    if [ $exit_code -eq 0 ]; then
+      # MODE 1: Enter -> Auto-Paste ke terminal aktif
+      # Jeda minimal hanya agar modifier keys dilepas bersih oleh xdotool
+      sleep 0.05
+      xdotool key --clearmodifiers ctrl+shift+v
+    elif [ $exit_code -eq 10 ]; then
+      # MODE 2: Shift+Enter -> Hanya salin ke clipboard (Manual Paste)
+      notify-send -u low "Translation Copied!" "$translated" &
+    fi
+  else
+    notify-send -u normal "Translation Error" "Gagal menerjemahkan teks." &
+  fi
+fi
