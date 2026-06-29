@@ -2,10 +2,17 @@
 
 # Jalankan Rofi dan tangkap input serta exit code.
 # PENTING: Pipe echo -n "" agar Rofi tidak menggantung menunggu stdin.
-text=$(echo -n "" | rofi -dmenu -p "Translate to EN:" \
+THEME_FILE="$HOME/.config/bspwm/config/rofi-themes/Translation.rasi"
+if [ -f "$THEME_FILE" ]; then
+  ROFI_ARGS="-theme $THEME_FILE"
+else
+  ROFI_ARGS="-p 'Translate to EN:' -theme-str 'window {width: 40%;}'"
+fi
+
+text=$(echo -n "" | rofi -dmenu \
+            $ROFI_ARGS \
             -kb-accept-alt "" \
-            -kb-custom-1 "Shift+Return" \
-            -theme-str 'window {width: 40%;}')
+            -kb-custom-1 "Shift+Return")
 
 exit_code=$?
 
@@ -27,8 +34,8 @@ if [ -n "$text" ]; then
   # Panggil API Google Translate secara langsung (~150-250ms)
   response=$(curl -s -A "Mozilla/5.0" "https://translate.googleapis.com/translate_a/single?client=gtx&sl=id&tl=en&dt=t&q=${encoded}")
   
-  # Ekstrak hasil terjemahan menggunakan jq
-  translated=$(echo "$response" | jq -r '.[0][0][0]')
+  # Ekstrak hasil terjemahan menggunakan jq (gabungkan semua segmen kalimat jika multi-kalimat)
+  translated=$(echo "$response" | jq -r '.[0] | map(.[0]) | join("")')
   
   if [ -n "$translated" ] && [ "$translated" != "null" ]; then
     # Selalu masukkan hasil terjemahan ke clipboard utama
